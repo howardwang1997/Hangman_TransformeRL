@@ -240,6 +240,8 @@ class Environment(gym.Env):
     def action_pool(self):
         if not hasattr(self, 'actions'):
             self.actions = torch.tensor(vocab(alphabets))
+            if torch.cuda.is_available():
+                self.actions.to('cuda')
         return self.actions
 
 
@@ -253,10 +255,12 @@ class Agent:
         self.val_env = Environment(vl)
 
         self.policy_net, self.target_net = DQN(), DQN()
+        self.policy_net.to(self.device)
+        self.target_net.to(self.device)
 
         self.update_count = 0
         self.optimizer = optim.AdamW(self.policy_net.parameters(), lr=LR)
-        self.loss_func = torch.nn.MSELoss()
+        self.loss_func = torch.nn.MSELoss().to(self.device)
         self.train_reward_list = []
 
     def store_transition(self, transition):
@@ -275,8 +279,8 @@ class Agent:
 
     def update(self):
         state = torch.cat([t.state.view(1, -1) for t in self.memory], dim=0)
-        action = torch.tensor(vocab([t.action for t in self.memory]))
-        reward = torch.tensor([t.reward for t in self.memory])
+        action = torch.tensor(vocab([t.action for t in self.memory])).to(self.device)
+        reward = torch.tensor([t.reward for t in self.memory]).to(self.device)
         next_state = torch.cat([t.next_state.view(1, -1) for t in self.memory], dim=0)
         losses = []
         # print(state, action, reward, next_state)
@@ -287,7 +291,7 @@ class Agent:
         for _ in range(10):
             for index in BatchSampler(SubsetRandomSampler(range(len(self.memory))), batch_size=BATCH_SIZE, drop_last=False):
                 # v = (self.policy_net(state).gather(1, action))[index]
-                loss = self.loss_func(target_v[index].unsqueeze(1), (self.policy_net(state, action))[index])
+                loss = self.loss_func(target_v[index].unsqueeze(-1), (self.policy_net(state, action))[index])
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
@@ -305,10 +309,9 @@ def train():
         for i_ep in range(EPISODES):
             agent.env.reset()
             while True:
-                state = agent.env.state
+                state = agent.env.state.to('cuda')
                 action = agent.select_action(state)
                 result = agent.env.step(action)
-                # print(result)
                 next_state = result['state']
                 reward = result['reward']
                 stop = result['stop']
