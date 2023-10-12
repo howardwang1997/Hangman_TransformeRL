@@ -285,18 +285,18 @@ class Agent:
         reward = (reward - reward.mean()) / (reward.std() + EPSILON)
         with torch.no_grad():
             target_v = reward + GAMMA * self.target_net(next_state, self.env.action_pool()).max(1)[0]
-
-        for index in BatchSampler(SubsetRandomSampler(range(len(self.memory))), batch_size=BATCH_SIZE, drop_last=False):
-            # v = (self.policy_net(state).gather(1, action))[index]
-            loss = self.loss_func(target_v[index].unsqueeze(1), (self.policy_net(state, action))[index])
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-            # self.writer.add_scalar('loss/value_loss', loss, self.update_count)
-            losses.append(loss.item())
-            self.update_count += 1
-            if self.update_count % 100 == 0:
-                self.target_net.load_state_dict(self.policy_net.state_dict())
+        for _ in range(10):
+            for index in BatchSampler(SubsetRandomSampler(range(len(self.memory))), batch_size=BATCH_SIZE, drop_last=False):
+                # v = (self.policy_net(state).gather(1, action))[index]
+                loss = self.loss_func(target_v[index].unsqueeze(1), (self.policy_net(state, action))[index])
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                # self.writer.add_scalar('loss/value_loss', loss, self.update_count)
+                losses.append(loss.item())
+                self.update_count += 1
+                if self.update_count % 100 == 0:
+                    self.target_net.load_state_dict(self.policy_net.state_dict())
         return sum(losses) / len(losses)
 
 def train():
