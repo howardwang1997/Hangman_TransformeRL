@@ -39,7 +39,7 @@ class SeqEmbedding(nn.Module):
             x = x.view(1,-1)
         seq_len = x.size(1)
         pos = torch.arange(seq_len, dtype=torch.long)
-        pos.to(x.device)
+        pos = pos.to(x.device)
         pos = pos.unsqueeze(0).expand_as(x)  # [seq_len] -> [batch_size, seq_len]
         embedding = self.tok_embed(x) + self.pos_embed(pos)
         return self.norm(embedding)
@@ -55,7 +55,6 @@ class LetterEmbedding(nn.Module):
     def forward(self, x):
         if x.dim() <= 1:
             x = x.view(1,-1)
-        seq_len = x.size(1)
         embedding = self.tok_embed(x)
         return self.norm(embedding)
 
@@ -78,6 +77,8 @@ class MHA(nn.Module):
         self.W_Q = nn.Linear(d_model, d_k * n_heads)
         self.W_K = nn.Linear(d_model, d_k * n_heads)
         self.W_V = nn.Linear(d_model, d_v * n_heads)
+        self.linear = nn.Linear(n_heads * d_v, d_model)
+        self.LN = nn.LayerNorm(d_model)
 
     def forward(self, Q, K, V, attn_mask):
         # q: [batch_size, seq_len, d_model], k: [batch_size, seq_len, d_model], v: [batch_size, seq_len, d_model]
@@ -94,8 +95,8 @@ class MHA(nn.Module):
         context = Attention()(q_s, k_s, v_s, attn_mask)
         context = context.transpose(1, 2).contiguous().view(batch_size, -1,
                                                             n_heads * d_v)  # context: [batch_size, seq_len, n_heads * d_v]
-        output = nn.Linear(n_heads * d_v, d_model)(context)
-        return nn.LayerNorm(d_model)(output + residual)  # output: [batch_size, seq_len, d_model]
+        output = self.linear(context)
+        return self.LN(output + residual)  # output: [batch_size, seq_len, d_model]
 
 
 class FFN(nn.Module):

@@ -18,12 +18,12 @@ specials = ['#', '_', '/']
 MAX_LEN = 40
 CAPACITY = 100000
 LR = 1e-3
-VAL_RATIO = 0.8
+VAL_RATIO = 0.2
 EPSILON = 1e-9
 GAMMA = 0.99
-BATCH_SIZE = 32
+BATCH_SIZE = 256
 EPOCHS = 100
-EPISODES = 100
+EPISODES = 1000
 
 def get_vocab(alphabets_list=alphabets, specials=specials):
     return build_vocab_from_iterator(alphabets_list, specials=specials)
@@ -222,6 +222,9 @@ class Environment(gym.Env):
         self.truth = data[2]
         self.template = data[1]
         self.state = data[0]
+        if torch.cuda.is_available():
+            self.template = self.template.to('cuda')
+            self.state = self.state.to('cuda')
         self.word = ''.join(vocab.lookup_tokens(list(self.state.cpu())))
         self.life = 6
         self.attempts = ''
@@ -241,12 +244,12 @@ class Environment(gym.Env):
         if not hasattr(self, 'actions'):
             self.actions = torch.tensor(vocab(alphabets))
             if torch.cuda.is_available():
-                self.actions.to('cuda')
+                self.actions = self.actions.to('cuda')
         return self.actions
 
 
 class Agent:
-    def __init__(self, tr, vl):
+    def __init__(self, tr, vl, policy_net, target_net):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.memory = []
         self.position = 0
@@ -254,7 +257,7 @@ class Agent:
         self.env = Environment(tr)
         self.val_env = Environment(vl)
 
-        self.policy_net, self.target_net = DQN(), DQN()
+        self.policy_net, self.target_net = policy_net, target_net
         self.policy_net.to(self.device)
         self.target_net.to(self.device)
 
@@ -304,15 +307,20 @@ class Agent:
 
 def train():
     tr, vl = DataDebug().split(VAL_RATIO)
+    policy_net, target_net = DQN(), DQN()
     for epoch in range(EPOCHS):
-        agent = Agent(tr, vl)
+        agent = Agent(tr, vl, policy_net, target_net)
         for i_ep in range(EPISODES):
             agent.env.reset()
             while True:
-                state = agent.env.state.to('cuda')
+                state = agent.env.state
+                if torch.cuda.is_available():
+                    state = state.to('cuda')
                 action = agent.select_action(state)
                 result = agent.env.step(action)
                 next_state = result['state']
+                if torch.cuda.is_available():
+                    next_state = next_state.to('cuda')
                 reward = result['reward']
                 stop = result['stop']
                 transition = TRANSITION(state, action, next_state, reward)
@@ -323,6 +331,9 @@ def train():
 
         epoch_loss = agent.update()
         print('Epoch %d: Loss = %.4f' % (epoch, epoch_loss))
-
+        policy_net, target_net = agent.policy_net, agent.target_net
+        torch.save(policy_net.state_dict(), './checkpoint/%d_sd.pt' % epoch)
+    policy_net.to('cpu')
+    torch.save(policy_net.state_dict(), './results/final_sd.pt')
 
 train()
