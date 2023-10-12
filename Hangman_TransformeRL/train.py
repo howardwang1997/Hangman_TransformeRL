@@ -244,12 +244,11 @@ class Environment(gym.Env):
 
 
 class Agent:
-    def __init__(self):
+    def __init__(self, tr, vl):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.memory = []
         self.position = 0
         self.steps_done = 0
-        tr, vl = DataDebug().split(VAL_RATIO)
         self.env = Environment(tr)
         self.val_env = Environment(vl)
 
@@ -300,8 +299,9 @@ class Agent:
         return sum(losses) / len(losses)
 
 def train():
+    tr, vl = DataDebug().split(VAL_RATIO)
     for epoch in range(EPOCHS):
-        agent = Agent()
+        agent = Agent(tr, vl)
         for i_ep in range(EPISODES):
             agent.env.reset()
             while True:
