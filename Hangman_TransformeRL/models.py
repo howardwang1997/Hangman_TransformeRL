@@ -39,6 +39,7 @@ class SeqEmbedding(nn.Module):
             x = x.view(1,-1)
         seq_len = x.size(1)
         pos = torch.arange(seq_len, dtype=torch.long)
+        pos.to(x.device)
         pos = pos.unsqueeze(0).expand_as(x)  # [seq_len] -> [batch_size, seq_len]
         embedding = self.tok_embed(x) + self.pos_embed(pos)
         return self.norm(embedding)
