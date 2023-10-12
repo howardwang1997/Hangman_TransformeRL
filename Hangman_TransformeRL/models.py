@@ -140,10 +140,10 @@ class FCN(nn.Module):
         super().__init__()
         self.fc1 = nn.Linear(d_model, d_model)
         self.fc2 = nn.Linear(d_model, 1)
-        self.softmax = nn.Softmax()
+        self.softplus = nn.Softplus()
 
     def forward(self, x):
-        return self.fc2(self.softmax(self.fc1(x)))
+        return self.fc2(self.softplus(self.fc1(x)))
 
 
 class DQN(nn.Module):
